@@ -13,10 +13,12 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.SecretKey;
 
 @Component
+@Slf4j
 public class JwtTokenProvider {
 
     private final SecretKey secretKey;
@@ -30,20 +32,25 @@ public class JwtTokenProvider {
         this.secretKey = createSecureKey(secret);
         this.accessTokenValidityMs = accessTokenValidityMs;
         this.refreshTokenValidityMs = refreshTokenValidityMs;
+        log.info("JwtTokenProvider initialized with access token validity: {}ms", accessTokenValidityMs);
     }
 
     public String generateAccessToken(String subject) {
+        log.debug("Generating access token for subject: {}", subject);
         Date now = new Date();
         Date expiry = new Date(now.getTime() + accessTokenValidityMs);
-        return Jwts.builder()
+        String token = Jwts.builder()
                 .setSubject(subject)
                 .setIssuedAt(now)
                 .setExpiration(expiry)
                 .signWith(secretKey, SignatureAlgorithm.HS256)
                 .compact();
+        log.debug("Access token generated successfully for: {}", subject);
+        return token;
     }
 
     public String generateRefreshToken(String subject) {
+        log.debug("Generating refresh token for subject: {}", subject);
         Date now = new Date();
         Date expiry = new Date(now.getTime() + refreshTokenValidityMs);
         return Jwts.builder()
@@ -57,8 +64,10 @@ public class JwtTokenProvider {
     public boolean validateToken(String token) {
         try {
             getClaims(token);
+            log.debug("Token validation successful");
             return true;
         } catch (Exception e) {
+            log.warn("Token validation failed: {}", e.getMessage());
             return false;
         }
     }

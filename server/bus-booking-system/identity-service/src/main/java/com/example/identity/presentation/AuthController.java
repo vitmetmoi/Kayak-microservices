@@ -24,6 +24,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -31,6 +32,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
 
     private final AuthService authService;
@@ -38,12 +40,14 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+        log.info("POST /auth/login - Request received for: {}", request.getEmail());
         LoginResponse loginResponse = authService.login(request);
 
         // Create and set the ACCESS_TOKEN cookie
         boolean isSecure = false; // Change to true in production
         ResponseCookie accessCookie = CookieUtil.accessCookie(loginResponse.getToken(), isSecure);
 
+        log.info("POST /auth/login - Login successful for: {}", request.getEmail());
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, accessCookie.toString())
                 .body(loginResponse);
@@ -51,7 +55,9 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<RegisterResponse> register(@RequestBody RegisterRequest request) {
+        log.info("POST /auth/register - Request received for: {}", request.getEmail());
         RegisterResponse response = authService.register(request);
+        log.info("POST /auth/register - Registration successful for: {}", request.getEmail());
         return ResponseEntity.ok(response);
     }
 

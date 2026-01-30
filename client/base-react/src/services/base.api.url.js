@@ -1,5 +1,5 @@
 // Base API configuration for Bus Booking application
-export const API_BASE_URL = 'http://localhost:5000';
+export const API_BASE_URL = 'http://localhost:8080/api';
 
 // API endpoints
 export const API_ENDPOINTS = {

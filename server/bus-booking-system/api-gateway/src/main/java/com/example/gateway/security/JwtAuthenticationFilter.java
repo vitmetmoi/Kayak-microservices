@@ -1,5 +1,8 @@
 package com.example.gateway.security;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -12,6 +15,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * JWT Authentication Filter for API Gateway.
@@ -22,6 +26,9 @@ import java.util.List;
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+    private static final String CORRELATION_ID_HEADER = "X-Correlation-ID";
+
     @Value("${gateway.auth.excluded-paths:/api/auth/login,/api/auth/register}")
     private List<String> excludedPaths;
 
@@ -29,26 +36,48 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getPath().value();
+        String method = request.getMethod().name();
+
+        // Generate or extract correlation ID
+        String correlationId = request.getHeaders().getFirst(CORRELATION_ID_HEADER);
+        if (correlationId == null || correlationId.isBlank()) {
+            correlationId = UUID.randomUUID().toString().substring(0, 8);
+        }
+        final String finalCorrelationId = correlationId;
+
+        log.info("[{}] Incoming request: {} {}", correlationId, method, path);
 
         // Skip authentication for public endpoints
         if (isExcludedPath(path)) {
-            return chain.filter(exchange);
+            log.debug("[{}] Path {} is excluded from authentication", correlationId, path);
+            return forwardWithCorrelationId(exchange, chain, correlationId, null);
         }
 
         // Extract token from cookies
         String token = extractTokenFromCookies(exchange);
 
         if (token != null) {
-            // Forward the token in the Authorization header to downstream services
-            ServerHttpRequest modifiedRequest = request.mutate()
-                    .header("Authorization", "Bearer " + token)
-                    .build();
-            return chain.filter(exchange.mutate().request(modifiedRequest).build());
+            log.debug("[{}] Token found in cookies, forwarding to downstream service", correlationId);
+            return forwardWithCorrelationId(exchange, chain, correlationId, token);
         }
 
         // No token found - allow request to proceed (downstream service handles auth)
-        // This is Option B: Gateway forwards, Identity Service validates
-        return chain.filter(exchange);
+        log.debug("[{}] No token found, forwarding request without authentication", correlationId);
+        return forwardWithCorrelationId(exchange, chain, correlationId, null);
+    }
+
+    private Mono<Void> forwardWithCorrelationId(ServerWebExchange exchange, GatewayFilterChain chain,
+            String correlationId, String token) {
+        ServerHttpRequest.Builder requestBuilder = exchange.getRequest().mutate()
+                .header(CORRELATION_ID_HEADER, correlationId);
+
+        if (token != null) {
+            requestBuilder.header("Authorization", "Bearer " + token);
+        }
+
+        return chain.filter(exchange.mutate().request(requestBuilder.build()).build())
+                .doOnSuccess(v -> log.debug("[{}] Request completed successfully", correlationId))
+                .doOnError(e -> log.error("[{}] Request failed: {}", correlationId, e.getMessage()));
     }
 
     private boolean isExcludedPath(String path) {

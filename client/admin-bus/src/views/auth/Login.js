@@ -38,7 +38,8 @@ const Login = () => {
         setError('')
         try {
             const response = await authAPI.login(formData)
-            if (response.user || response.success) {
+            console.log("res", response);
+            if (response.email || response.role) {
                 localStorage.setItem('authToken', response.token)
                 dispatch(loginUser({ user: response.user, token: response.token }))
                 navigate('/dashboard')
